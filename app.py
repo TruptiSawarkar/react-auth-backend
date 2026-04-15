@@ -1,4 +1,5 @@
 import os
+import json
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from flask import Flask, request, jsonify
@@ -18,7 +19,8 @@ app.secret_key = os.urandom(24)
 CORS(app, supports_credentials=True, origins=[
     "http://localhost:5173",
     "http://localhost:3000",
-    "http://127.0.0.1:5173"
+    "http://127.0.0.1:5173",
+    "https://react-auth-frontend.vercel.app"
 ])
 
 # Initialize Firebase Admin SDK
@@ -26,16 +28,27 @@ firebase_initialized = False
 db = None
 
 try:
-    # Check if service account key exists
-    if not os.path.exists("firebase-admin-key.json"):
-        raise FileNotFoundError("firebase-admin-key.json not found!")
+    # Try to get credentials from environment variable first (Render)
+    firebase_creds_json = os.environ.get('FIREBASE_CREDENTIALS')
     
-    cred = credentials.Certificate("firebase-admin-key.json")
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    firebase_initialized = True
-    print("✅ Firebase Admin SDK initialized successfully!")
-    print("✅ Firestore client connected!")
+    if firebase_creds_json:
+        # Parse JSON from environment variable
+        cred_dict = json.loads(firebase_creds_json)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        firebase_initialized = True
+        print("✅ Firebase initialized from environment variable")
+    elif os.path.exists("firebase-admin-key.json"):
+        # Fallback to local file (for local development)
+        cred = credentials.Certificate("firebase-admin-key.json")
+        firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        firebase_initialized = True
+        print("✅ Firebase initialized from local file")
+    else:
+        raise FileNotFoundError("No Firebase credentials found")
+        
 except Exception as e:
     print(f"❌ Firebase initialization error: {e}")
     print("⚠️  The app will run but Firebase features won't work")
